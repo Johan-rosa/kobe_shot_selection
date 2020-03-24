@@ -1,7 +1,12 @@
 # This script was taken from  Todd Wschneider app
 # Reference: https://github.com/toddwschneider
 
-plot_court = function(court_theme = court_themes$dark, use_short_three = FALSE) {
+# Función para general los puntos de la cancha
+generate_court_points <- function() {
+  # Paquetes requeridos
+  require(tibble)
+  require(dplyr)
+  
   # Figura de la cancha 
   circle_points = function(center = c(0, 0), radius = 1, npoints = 360) {
     angles = seq(0, 2 * pi, length.out = npoints)
@@ -22,13 +27,6 @@ plot_court = function(court_theme = court_themes$dark, use_short_three = FALSE) 
   three_point_radius = 23.75
   three_point_side_radius = 22
   three_point_side_height = 14
-  
-  
-  
-  if (use_short_three) {
-    three_point_radius = 22
-    three_point_side_height = 0
-  }
   
   court_points = tibble(
     x = c(width / 2, width / 2, -width / 2, -width / 2, width / 2),
@@ -91,7 +89,16 @@ plot_court = function(court_theme = court_themes$dark, use_short_three = FALSE) 
     three_point_line
   )
   
-  court_points <<- court_points
+  return(court_points)
+  
+}
+
+
+plot_court = function(court_theme = court_themes$dark, use_short_three = FALSE) {
+  
+  
+  court_points <- generate_court_points()
+  
   
   ggplot() +
     geom_path(
@@ -142,13 +149,8 @@ court_themes = list(
   )
 )
 
-ggplot() +
-  geom_path(
-    data = court_points,
-    aes(x = x, y = y, group = desc)
-  )
 
 
-
-#rm(list = ls()[!ls() %in% c("plot_court", "court_themes")])
+rm(list = ls()[!ls() %in% c(#"plot_court", "court_themes",
+                            "generate_court_points")])
 

@@ -1,0 +1,405 @@
+---
+title: "La grandeza de Kobe Bryant II: selección de tiros"
+output: html_notebook
+---
+
+Tras el fallecimiento de Kobe Bryant me comprometí a postear una serie de entradas relacionadas a él. En esta oportunidad haremos un análisis exploratorio de Kobe Bryant desde la optica de los tiros que tomó en sus 20 años de carrera profesional.
+
+La data para este análisis es una publicada en [kaggle](https://www.kaggle.com/) para una competencia de machine learning. El objetivo de la competencia es utilizar un set de los tiros tomados por Kobe y construir un modelo que clasifique si una serie de observaciones, para las cuales no tenemos el resultado, fueron encestados o no. 
+
+Entre las variables que constituyen el set de datos se encuentran las siguientes:
+
+- Ubicación del tiro, con coordenadas en escala a las dimensiones de una chancha de basket.
+- Zona del tiro
+- Distancia respecto al aro
+- Tiempo restante del cuarto
+- Tipo de tiro (tablerito, gancho, donqueo, jump shot)
+- Id del juego
+- Equipo contrincante
+- Si el tiro se tomó en playoff o serie regular
+- Fecha del juego
+- Resultado del lanzamiento (acierto o fallo)
+
+Todas estas son variables interesantes y con ellas, sin dudas, se puede construir un buen modelo. Pero hay muchos aspectos que quedan al margen y son relevantes a la hora de juzgar un tiro o las selecciones de tiro de un jugador.
+
+<!---
+En general, las limitaciones que  le veo a este tipo de data para comprender lo legendario de cada tiro encestado por Kobe Bryant, radica en el hecho de que no sabemos qué tan cerca estaba el defensor o defensores más cercanos, no registra cuanto tiempo hacía que se había recuperado de una lesión y de cuál lesión, no marca si estaba jugando lastimado (algo que hizo con frecuencia), no hay detalle de la posición de los compañeros en cancha ni de quienes eran, no hay detalles de los malabares que debió hacer para colocarse en una determinada ubicación, ect. Sin esos detalles no sería prudente dar juicios de valor en base a información que tenemos aquí, y no lo haré, simplemente me limitaré a describir las ideas que me generen las visualizaciones. --->
+
+Por otro lado, para la modelación pensé inicialmente en un modelo de regresión logística, al tratarse de una variable dependiente dicotómica, pero al final me incliné por un modelo más fancy, el Random Forest. Lo hago de esta forma porque me interesa más el desempeño del modelo que las facilidades de interpretar resultados y establecer relaciones entre variables que dan los modelos de regresión logistica.
+
+## Para reproducir el contenido
+
+En esta oportunidad y quizás en las próximas estaré compartiendo el enlace al proyecto en Rstudio.cloud de cada post. De esta manera es casi garantizada la posibilidad de reproducir todo el contenido, porque todos los interesados tendrán al alcance de un link una sección de R en el navegador, que contiene todos los archivos que utilicé para hacer el trabajo. 
+
+De igual forma, compartiré el repositorio en gitbub como en publicaciones anteriores, esta es la manera más fácil de proponer modificaciones o 
+
+Para lograr hacer visualizaciones llamativas traté varias opciones para tener la forma de una chancha de basket en algunos gráficos. El primer intento fue colocar una imagen de fondo en los gráficos pero no lograba ajustar bien las dimensiones y quedaba feo, al final terminé por dibujar las líneas con ggplot. Para lograr esto me auxilié del código de varias personas, principalmente el de [Todd Wschneider]() que a su vez se basó en las publicaciones de [Savvas Tjortjoglou](http://savvastjortjoglou.com/nba-shot-sharts.html) (por eso amo mundo open source). Menciono esto porque las adaptaciones que le hice a lo que ellos hicieron fueron extensas y por si solas representarían una publicación individual, pero igual pueden acceder a todos los objetos desde el workspace en el repositorio en gitbub.
+
+## Paquetes 
+
+```{r}
+library(tidyverse)
+library(hexbin)
+library(patchwork)
+library(ggthemes)
+```
+
+
+### Análisis exploratorio
+
+En esta sección trateré de distribuir adecuadamente la interpretación de las visualizaciones y los comentarios sobre los detalles y estrategias utilizadas para generarlas. Esto para no aburrir a los que entren a leer sin interés muy profundo en el código, o viceversa.
+
+La verdad es que kobe tiraba mucho, tomaba tiros muy difíciles con mucha frecuencia y eso lo llevó a marcar un porcentaje de aciertos, para algunos, cuestionable. En toda su carrea lanzó cerca de 45% de campo, pero aun así se colocó en el top tres de anotadores de la história de la NBA (Lebron le pasó días antes de su muerte), también deleitó al mundo con una serie de canastos inigualables.  
+
+El primer gáfico resume esto, kobe tomó mas de 1,000 tiros en la mayoría de las temporadas que jugó y solo tomó menos de 750 tiros en los años de novato y en los años tras la lesión del tendón de Aquíles.
+
+Estas visualizaciones son bastante básicas, no creo que sea necesario comentar el código para realizarlas. 
+
+```{r eficiencia_temporada}
+# Gráfico de la cantidad de tiros
+p1 <- complete_cases %>%
+  group_by(season = parse_number(season), shot_type) %>% 
+  summarise(fg_percent = mean(shot_made_flag),
+            tiros = n()) %>% 
+  ggplot(aes(x = season, y = tiros, color = shot_type)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = scales::comma) +
+  theme_light() +
+  scale_color_tableau() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.title.x = element_blank()
+  ) +
+  labs(
+    x = "",
+    y = "Cantidad de tiros",
+    title = "Cantidad de tiros y porcentaje de aciertos por temporada"
+  )
+
+# Gráfico del porcentaje de campo
+p2 <- complete_cases %>%
+  group_by(season = parse_number(season), shot_type) %>% 
+  summarise(
+    fg_percent = mean(shot_made_flag),
+    tiros = n()
+    ) %>% 
+  ggplot(aes(x = season, y = fg_percent, color = shot_type)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = scales::percent) +
+  coord_cartesian(ylim = c(0, 0.60)) +
+  theme_light() +
+  scale_color_tableau() +
+  theme(
+    legend.position = "bottom"
+  ) +
+  labs(x = "Temporada", y = "Porcentaje de campo")
+  
+p1 / p2
+```
+
+
+
+```{r}
+complete_cases %>% 
+  count(season, shot_type) %>% 
+  ggplot(aes(x = parse_number(season), y = n, fill = shot_type)) +
+  geom_col(position = "fill", alpha = 0.8) +
+  scale_fill_tableau() +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  labs(fill = "",
+       y = "Distribución porcentual",
+       x = "Temporada", 
+       title = "Distribución porcentual de los tiros tomados según tipo") +
+  coord_cartesian(expand = FALSE)
+```
+
+
+
+
+```{r}
+complete_cases %>% 
+  count(action_type) %>% arrange(desc(n))
+```
+
+
+
+
+
+Las siguientes visualizaciones exploran los tiros tomados por Kobe pero enfocandose en la posición de la cancha en la que los tomó. Indudablemente el  lugar del tiro influye mucho en la probabilidad de acierto, muchas vece los tiros más alejados suelen fallarse más, o los del lado opuesto a la mano dominante, ect. El set de datos trae 2 variables categóricas con la posición de la cancha en la que se tomó el tiro, por tanto, podemos ver la cantidad y el porcentaje de acierto en cada zona de la cancha.
+
+Estos gráficos introducen dos cuestiones novedosas:
+
+1. Usan la función `reorder_within()` del paquete `{tidytext}`, creado por Julia Silge y  David Robinson, que permite tener gráficos en facets con ejes organizados independientemente.
+
+2. Usar todo un gráfico como una anotación en otro gráfico. Esto esto puede tener una gran variedad de usos, pero en este caso lo utilicé para colocar una leyenda interesante al gráfico. De esta forma hasta alguien poco familiarizado con las dimensiones de una chanchan entendería a qué área se refiere cada barra. 
+
+
+```{r desempeno_area1, fig.width=10}
+shot_zone <- shots_data %>% 
+  filter(shot_zone_basic != "Backcourt") %>% 
+  ggplot() +
+  geom_point(
+    aes(x = loc_x/10, y = (loc_y + 50)/10,
+        color = shot_zone_basic), show.legend = FALSE
+    ) +
+   geom_path(
+    data = court_points,
+    aes(x = x, y = y, group = desc)
+  ) +
+  theme(
+    axis.text = 
+  ) +
+  theme_void() +
+  theme(legend.position = "right") +
+  labs() +
+   scale_color_tableau()
+
+
+complete_cases %>% 
+  filter(shot_zone_basic != "Backcourt") %>% 
+  group_by(shot_zone_basic) %>% 
+  summarise(
+    tiros = n(),
+    porcentaje = mean(shot_made_flag, na.rm = TRUE)
+  ) %>% 
+  gather(medida, valor, -shot_zone_basic) %>%
+  mutate(
+    medida = factor(medida, labels = c("Porcentaje de tiro", "Cantidad de tiros"))
+  ) %>% 
+  ggplot(aes(
+    x = tidytext::reorder_within(shot_zone_basic, desc(valor), medida),
+    y = valor,
+    fill = shot_zone_basic)) +
+  geom_col(show.legend = FALSE, alpha = 0.8) +
+  facet_wrap(~medida, scales = "free") +
+  tidytext::scale_x_reordered() +
+  coord_flip() +
+  annotation_custom(
+    ggplotGrob(shot_zone),
+    xmin = 4, xmax = 6,
+    ymin = 6500, ymax = 12000
+    ) +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::comma) +
+  theme(
+    strip.text = element_text(size = 12, face = "bold")
+  ) +
+  labs(x = "",
+       y = "") +
+   scale_fill_tableau()
+```
+
+```{r desempeno_area2,  fig.width=10}
+# Gráfico que funguirá como leyenda
+shot_zone2 <- shots_data %>% 
+  # excluyendo los tiros antes de más de media chancha
+  filter(shot_zone_area != "Back Court(BC)") %>% 
+  ggplot() +
+  geom_point(aes(
+    # ajustando la escala de las coodenadas, para que ajuste
+    # al de la chancha que tenemos
+    x = loc_x/10, y = (loc_y + 50)/10,
+    color = shot_zone_area), show.legend = FALSE) +
+  # Agregando las líneas de la chancha
+   geom_path(
+    data = court_points,
+    aes(x = x, y = y, group = desc)
+  ) +
+  theme_void() +
+  theme(legend.position = "right") +
+  scale_color_tableau()
+
+# Gráfico de barras con los tiros y porcentaje de tiro por zona
+complete_cases %>% 
+  filter(shot_zone_area != "Back Court(BC)") %>% 
+  group_by(shot_zone_area) %>% 
+  summarise(
+    tiros = n(),
+    porcentaje = mean(shot_made_flag, na.rm = TRUE)
+  ) %>% 
+  # colocando la data en formato long
+  gather(medida, valor, -shot_zone_area) %>%
+  mutate(
+    medida = factor(medida, labels = c("Porcentaje de tiro", "Cantidad de tiros"))
+  ) %>% 
+  ggplot(aes(
+    x = tidytext::reorder_within(shot_zone_area, desc(valor), medida),
+    y = valor,
+    fill = shot_zone_area)) +
+  geom_col(show.legend = FALSE, alpha = 0.8) +
+  facet_wrap(~medida, scales = "free") +
+  tidytext::scale_x_reordered() +
+  coord_flip() +
+  annotation_custom(ggplotGrob(shot_zone2), xmin = 3.8, xmax = 5.5, ymin = 6500, ymax = 12000) +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::comma) +
+  theme(
+    strip.text = element_text(size = 12, face = "bold")
+  ) +
+  labs(x = "",
+       y = "") +
+   scale_fill_tableau()
+```
+
+
+Sin duda la data categórica es interesante, pero creo que resulta más emocionante ver un gráfico de los tiros individuales. 
+
+
+```{r}
+complete_cases %>% 
+  filter(shot_zone_basic != "Backcourt") %>% 
+  ggplot(aes(x = loc_x/10, y = (loc_y + 50)/10)) +
+  geom_point(alpha = 0.5, aes(color = factor(shot_made_flag))) +
+  geom_path(
+    data = court_points,
+    aes(x = x, y = y, group = desc)
+  ) +
+  scale_color_tableau(labels = c("Fallados", "Acertados")) +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    legend.position = "bottom"
+  ) + 
+  labs(color = "") +
+  coord_cartesian(expand = FALSE)
+  
+```
+
+  
+  
+```{r}
+complete_cases %>% 
+  filter(combined_shot_type == "Jump Shot", shot_zone_basic != "Backcourt") %>% 
+  ggplot() +
+        stat_density2d(
+          geom = 'polygon',
+          contour = T, n = 500,
+          aes(x = loc_x/10,
+              y = (loc_y + 50)/10,
+              color = factor(shot_made_flag, levels = c(0, 1), labels = c("Fallados", "Anotados")),
+              fill = ..level../max(..level..),
+              alpha = ..level..)
+          ) +
+  geom_path(
+    data = court_points,
+    aes(x = x, y = y, group = desc)
+  ) +
+  guides(alpha = FALSE, color = FALSE) +
+  facet_wrap(~factor(shot_made_flag, levels = c(0, 1), labels = c("Fallados", "Anotados"))) +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    strip.text = element_text(size = 12),
+    legend.position = "bottom"
+  ) + 
+  scale_fill_viridis_c(option = "magma")
+```
+
+
+```{r}
+#c("1999-00", "2000-01", "2001-02", "2008-09", "2009-10")
+
+complete_cases %>% 
+  filter(combined_shot_type == "Jump Shot", shot_zone_basic != "Backcourt") %>%
+  ggplot() +
+        stat_density2d(
+          aes(x = loc_x/10,
+              y = (loc_y + 50)/10,
+              fill = stat(density/ max(density))),
+          geom = "raster",
+          contour = FALSE,
+          interpolate = TRUE,
+          n = 50
+          ) +
+  geom_path(
+    data = court_points,
+    aes(x = x, y = y, group = desc),
+    color = "white"
+  ) +
+  scale_fill_viridis_c(
+      "Frecuencia",
+      limits = c(0, 1),
+      breaks = c(0, 0.5, 1),
+      labels = c("baja", "media", "alta"),
+      option = "magma",
+      guide = guide_colorbar(barwidth = 10)
+    )  +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    strip.text = element_text(size = 12),
+    legend.position = "bottom"
+  ) +
+  coord_cartesian(expand = FALSE)
+  
+```
+
+```{r}
+train %>% 
+  filter(combined_shot_type %in% c("Bank Shot", "Hook Shot"),shot_zone_basic != "Backcourt") %>% 
+  ggplot() +
+        stat_density2d(
+          aes(x = loc_x/10,
+              y = (loc_y + 50)/10,
+              fill = stat(density/ max(density))),
+          geom = "raster",
+          contour = FALSE,
+          interpolate = TRUE,
+          n = 50
+          ) +
+  facet_wrap(~factor(combined_shot_type, levels =  c("Bank Shot", "Hook Shot"), labels = c("Tableritos", "Ganchos")), scales = "free") +
+  geom_path(
+    data = court_points,
+    aes(x = x, y = y, group = desc),
+    color = "white"
+  )  +
+  scale_fill_viridis_c(
+      "Frecuencia de tiro",
+      limits = c(0, 1),
+      breaks = c(0, 1),
+      labels = c("baja", "alta"),
+      option = "magma",
+      guide = guide_colorbar(barwidth = 8)
+    )  +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    strip.text = element_text(size = 12),
+    legend.position = "bottom"
+  ) +
+  coord_cartesian(expand = FALSE)
+```
+
+# Modeling 
+
+
+
+
+# Ideas
+- En qué cuarto metía más puntos
+- Qué tan bueno era cuando quedaban menos de 1 minuto
+
+# Cementerio
+
+Todas estas son variables útiles pero, en general, la habilidad anotadora de un jugador y el contexto de un tiro no se puede analizar completamente con este tipo de data, aunque sin dudas permite construir una visión interesante sobre el jugador. 
+
+
+
+
+
