@@ -25,13 +25,12 @@ Por estas razones me limitaré a ser completamente descriptivo en este post, ade
 
 ## Para reproducir el contenido
 
-### Repositorios de archivos 
-Como de costumbre, compartiré el enlace al repositorio en github de la publicación, pero esta vez y quizás en las próximas ocasiones, compartiré también el enlace del proyecto en rstudio.cloud. Esta segunda opción garantiza la reproducción de todo el contenido, al poner una sección de R en el navegador, con todos los paquetes y archivos utilizados para crear el material. 
+Como de costumbre, compartiré el enlace al repositorio  de la publicación en github, pero esta vez y quizás en las próximas ocasiones, compartiré también el enlace del proyecto en rstudio.cloud. Esta segunda opción garantiza la reproducción de todo el contenido, al poner una sección de R en el navegador, con todos los paquetes y archivos utilizados para crear el material. 
 
 - [Proyecto en rstudio.cloud](https://rstudio.cloud/project/1010634)
-- [Repositorio en github]()
+- [Repositorio en github](https://github.com/Johan-rosa/kobe_shot_selection)
 
-Por otro lado, para lograr visualizaciones llamativas intenté varias opciones para incorporar los segmentos de la cancha en los gráficos. El primer intento fue colocar una imagen de fondo en los gráficos, pero no lograba ajustar bien las dimensiones y quedaba feo. El segundo intento consistió dibujar las líneas con ggplot2. Para lograr esto me auxilié del código de varias personas, principalmente el de [Todd Wschneider]() que a su vez se basó en las publicaciones de [Savvas Tjortjoglou](http://savvastjortjoglou.com/nba-shot-sharts.html) (por eso amo mundo open source). Menciono esto porque las adaptaciones que le hice a lo que ellos hicieron fueron extensas y por si solas representarían una publicación individual, pero igual pueden acceder a todos los objetos desde el workspace en el repositorio en gitbub.
+Por otro lado, para lograr visualizaciones llamativas intenté varias opciones para incorporar los segmentos de la cancha en los gráficos. El primer intento fue colocar una imagen de fondo en los gráficos, pero no lograba ajustar bien las dimensiones y quedaba feo. El segundo intento consistió dibujar las líneas con ggplot2. Para lograr esto me auxilié del código de varias personas, principalmente el de [Todd Wschneider](https://toddwschneider.com/) que a su vez se basó en las publicaciones de [Savvas Tjortjoglou](http://savvastjortjoglou.com/nba-shot-sharts.html) (por eso amo mundo open source). Menciono esto porque las adaptaciones que le hice a lo que ellos hicieron fueron extensas y por si solas representarían una publicación individual, pero igual pueden acceder a todos los objetos desde el workspace en los repositorios.
 
 ## La data 
 
@@ -51,7 +50,6 @@ Entre las variables que constituyen el set de datos se encuentran las siguientes
 - Resultado del lanzamiento (acierto o fallo)
 
 Aqui [Enlace de la competencia](https://www.kaggle.com/c/kobe-bryant-shot-selection), con los detalles sobre el set de datos, el enlace orginal de descarga y algunos notebooks de gente que ha compartido sus análisis y modelos. Es probable que en unos días yo publique el mío también. 
-
 
 ## Manos a la obra
 
@@ -284,14 +282,17 @@ shots_data %>%
 
 Hay distintas estrategias para lidiar con overplotting. Entre las más comunes está diminuir la transparencia de los puntos y esperar que las zonas de mayor concentración queden con un color más oscuro. Por otro lado se puede utilizar una geometría especial como  `hexbin::geom_hex()` que crea una especie de histograma bidimensional, en el que divide el espacio en binds hexagonales y cada uno toma color en función a la cantidad de puntos que cae en cada uno. 
 
-Las geometría de densidad bidimensional son otra opción para lidiar con este "problema". Estas facilitan mucho la interpretación porque agrupan las observaciones, en "circulos" con similar cantidad de puntos, de modo los circulos más pequeños tienen mayor densidad. También son una forma de representar en dos dimensiones algo que podría verse en tres. 
+Las geometría de densidad bidimensional son otra opción para lidiar con este "problema". Estas facilitan mucho la interpretación porque agrupan las observaciones, en "circulos" con similar cantidad de puntos, de modo los circulos más pequeños tienen mayor densidad. También son una forma de representar en dos dimensiones algo que podría verse en tres.
 
 Aquí se muestran tanto la versión en 2d como la versión 3d. Ahora es más fácil ver de donde metía y fallaba más Kobe. 
-  
+
+Para más ejemplos de como lidiar con overplotting pueden consultar las siguientes fuentes: [from data to viz](https://www.data-to-viz.com/caveat/overplotting.html) y [R graph gallery], ambas creaciones de [Yan Holtz](https://github.com/holtzy).
+
 ```{r desnity_2d}
 shots_data %>%
   filter(!is.na(shot_made_flag)) %>% 
   filter(combined_shot_type == "Jump Shot", shot_zone_basic != "Backcourt") %>% 
+  mutate(shot_made_flag = factor(shot_made_flag, labels = c("Fallados", "Anotados"))) %>% 
   ggplot() +
         stat_density2d(
           geom = 'polygon',
@@ -299,7 +300,7 @@ shots_data %>%
           n = 100,
           aes(x = loc_x,
               y = loc_y,
-              color = factor(shot_made_flag, levels = c(0, 1), labels = c("Fallados", "Anotados")),
+              color = shot_made_flag,
               fill = ..level../max(..level..),
               alpha = ..level..)
           ) +
@@ -308,7 +309,7 @@ shots_data %>%
     aes(x = x, y = y, group = desc)
   ) +
   guides(alpha = FALSE, color = FALSE) +
-  facet_wrap(~factor(shot_made_flag, levels = c(0, 1), labels = c("Fallados", "Anotados"))) +
+  facet_wrap(~shot_made_flag) +
   theme(
     axis.text = element_blank(),
     axis.title = element_blank(),
@@ -335,7 +336,9 @@ plotly::plot_ly(x = kd_shots$x, y = kd_shots$y, z = kd_shots$z) %>% plotly::add_
 
 Otra forma de verlo es usando usando la geometría `geom_raster()`. Esta se usó una vez en la publicación sobre [las defunciones en República Dominicana](https://www.johan-rosa.com/post/analisis-de-las-defunciones-en-republica-dominicana/). 
 
-En estos casos solo se grafican los jump shots porque incluir otros, como dunks, que fueron muchos y casi no los fallaba, quitaria un poco de 
+En estos casos solo se grafican los jump shots porque incluir otros, como dunks, que fueron muchos y casi no los fallaba, le quita un poco de gracia a la visualización.
+
+En general Kobe no transformó considerablemente su selección de tiro a lo largo de su carrera. 
 
 ```{r heat_map}
 #c("1999-00", "2000-01", "2001-02", "2008-09", "2009-10")
@@ -387,6 +390,12 @@ Un gráfico más, ahora con los trableritos y los ganchos. En estos gráficos qu
 ```{r heat_map2}
 shots_data %>% 
   filter(combined_shot_type %in% c("Bank Shot", "Hook Shot"), shot_zone_basic != "Backcourt") %>% 
+  mutate(
+    combined_shot_type = factor(
+      combined_shot_type,
+      levels =  c("Bank Shot", "Hook Shot"),
+      labels = c("Tableritos", "Ganchos"))
+  ) %>% 
   ggplot() +
         stat_density2d(
           aes(x = loc_x,
@@ -397,7 +406,7 @@ shots_data %>%
           interpolate = TRUE,
           n = 50
           ) +
-  facet_wrap(~factor(combined_shot_type, levels =  c("Bank Shot", "Hook Shot"), labels = c("Tableritos", "Ganchos")), scales = "free") +
+  facet_wrap(~combined_shot_type, scales = "free") +
   geom_path(
     data = court_points,
     aes(x = x, y = y, group = desc),
@@ -423,4 +432,58 @@ shots_data %>%
   coord_cartesian(expand = FALSE)
 ```
 
-Por último una tabla con 
+El tipo de tiro es una variable muy interesante y que sin dudas tendrán un protagonismo mayor a la hora de hacer el ejercicio de clasificación de los tiros para la competencia. 
+
+```{r}
+shots_data %>% 
+  group_by(combined_shot_type) %>% 
+  summarise(
+    cantidad = n(),
+    eficiencia = mean(shot_made_flag, na.rm = TRUE)
+  ) %>% arrange(desc(cantidad))
+```
+
+Ahora unas cuanta visualizaciones de kobe en el clutch. El siguiente gráfico analiza la cantidad de tiro que tomaba en cada minuto del último cuarto. No es de sorprender que al principio del último período tomara pocos tiros, porque normalmente a los estelares los denscansan al principio para aprovecharlos al final del juego. 
+
+En el caso de Kobe, claramente, los últimos 6 minutos del último período eran para él, sobre todo el último minuto. 
+
+```{r}
+shots_data %>% 
+  filter(period == 4) %>%
+  group_by(minutes_remaining) %>% 
+  summarise(
+    tiros = n(),
+    eficiencia = mean(shot_made_flag, na.rm = TRUE)
+    ) %>% 
+  ggplot(aes(x = minutes_remaining, y = tiros)) +
+  geom_point(size = 4, color = "midnightblue") +
+  geom_text(aes(label = paste0(round(eficiencia*100, 1), "%"),
+                vjust = -1)) +
+  scale_x_reverse(breaks = 11:0) +
+  theme_minimal() +
+  coord_cartesian(ylim = c(300, 1000)) +
+  labs(x = "Minutos restantes",
+       y = "Cantidad de tiros",
+       title = "Tiros tomados en cada minutos del último cuarto y eficiencia",
+       subtitle = "Nadie tiraba más que Kobe en el clutch")
+```
+
+## Comentarios finales
+
+Con este básico análisis exploratorio se sientan las bases para modelar los tiros de Kobe y tratar de clasificar los 5,000 intentos que vienen con `shot_made_flag` missing. 
+
+## Referencias 
+
+https://toddwschneider.com/posts/ballr-interactive-nba-shot-charts-with-r-and-shiny/
+https://www.kaggle.com/apapiu/exploring-kobe-s-shots
+https://www.r-graph-gallery.com/2d-density-chart.html
+https://www.kaggle.com/dansbecker/nba-shot-logs
+https://github.com/toddwschneider/nba-shots-db
+
+
+
+
+
+
+
+
